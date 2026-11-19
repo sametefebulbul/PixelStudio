@@ -1,0 +1,11 @@
+node_modules/
+server/dist/
+web/dist/
+projects/
+*.tmp
+__pycache__/
+.env
+*.log
+.DS_Store
+bench/runs/
+bench/results/

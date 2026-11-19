@@ -1,0 +1,27 @@
+{
+  "name": "pixel-studio",
+  "version": "0.1.0",
+  "description": "Local studio for LLM-drawn pixel art: describe, refine into a prompt, watch the model draw, compare variants, comment on regions.",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "pixel-studio": "bin/pixel-studio.js"
+  },
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace server & npm run dev --workspace web",
+    "build": "npm run build --workspace web && npm run build --workspace server",
+    "start": "node server/dist/index.js",
+    "test": "npm test --workspace server && python3 engine/scripts/selftest.py"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

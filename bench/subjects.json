@@ -1,0 +1,14 @@
+[
+  {"id": "sword", "size": 32, "brief": "a steel longsword with a brass crossguard, leather-wrapped grip and round pommel", "ref": "wpn_sword1"},
+  {"id": "axe", "size": 32, "brief": "a one-handed battle axe: iron axe head on a wooden haft", "ref": "wpn_axe1"},
+  {"id": "bow", "size": 32, "brief": "a wooden recurve bow with a taut string", "ref": "wpn_bow1"},
+  {"id": "dagger", "size": 32, "brief": "a short steel dagger with a simple guard and dark grip", "ref": "wpn_dagger2"},
+  {"id": "mace", "size": 32, "brief": "a flanged iron mace with a wooden handle", "ref": "wpn_mace1"},
+  {"id": "scroll", "size": 32, "brief": "a rolled parchment scroll tied with a red ribbon", "ref": "inv_scroll"},
+  {"id": "sack", "size": 32, "brief": "a burlap sack tied at the top with a blue cord", "ref": "inv_sack"},
+  {"id": "key", "size": 32, "brief": "an ornate golden key", "ref": "inv_gold_key"},
+  {"id": "mushroom", "size": 32, "brief": "a red-capped mushroom with white spots", "ref": "inv_mushroom"},
+  {"id": "mug", "size": 32, "brief": "a pewter tankard with a handle", "ref": "inv_mug"},
+  {"id": "helmet", "size": 32, "brief": "an open-face iron helmet with a nasal guard (front view)", "ref": null},
+  {"id": "potion", "size": 32, "brief": "a round glass potion flask with green liquid and a cork", "ref": null}
+]

@@ -1,0 +1,134 @@
+{
+ "name": "studio",
+ "note": "General-purpose fantasy item palette (17 material ramps x 5 tones, dark->light, light from top-left). Several ramps measured from CC0 icon sets (Idylwild's Inventory, OpenGameArt, CC0); the rest generated with hue-shifted ramps.",
+ "outline": "#140C08",
+ "ramps": {
+  "steel": [
+   "#3A3D4A",
+   "#505360",
+   "#727987",
+   "#9DA3B3",
+   "#D7DBED"
+  ],
+  "iron": [
+   "#26272E",
+   "#3B3D46",
+   "#5A5C66",
+   "#80838D",
+   "#B4B7BF"
+  ],
+  "leather": [
+   "#28150D",
+   "#3F2516",
+   "#5A3520",
+   "#764A2C",
+   "#966440"
+  ],
+  "wood": [
+   "#351B0F",
+   "#4A2D1B",
+   "#614128",
+   "#7E5630",
+   "#A27443"
+  ],
+  "linen": [
+   "#382F1D",
+   "#72613F",
+   "#9E885E",
+   "#C4AA77",
+   "#E3CFA2"
+  ],
+  "brass": [
+   "#493B12",
+   "#70581C",
+   "#A8862E",
+   "#E0BA59",
+   "#FFDF8E"
+  ],
+  "red": [
+   "#5B0A11",
+   "#84131F",
+   "#B21C2D",
+   "#D63A44",
+   "#F0707A"
+  ],
+  "blue": [
+   "#080A20",
+   "#192B66",
+   "#255AB1",
+   "#5996CC",
+   "#9DC4D7"
+  ],
+  "green": [
+   "#172D00",
+   "#224205",
+   "#395D12",
+   "#5A8424",
+   "#86B04A"
+  ],
+  "moss": [
+   "#090C07",
+   "#2D3A22",
+   "#5F7241",
+   "#909D65",
+   "#B5B89A"
+  ],
+  "bone": [
+   "#8A7656",
+   "#BFA37A",
+   "#DEC59B",
+   "#F1DDB3",
+   "#FFF9EA"
+  ],
+  "skin": [
+   "#612723",
+   "#A54E36",
+   "#D08B62",
+   "#DCC2A5",
+   "#F0EBE0"
+  ],
+  "purple": [
+   "#140D23",
+   "#412463",
+   "#7B37A7",
+   "#AD6CC1",
+   "#CFA9D3"
+  ],
+  "glass": [
+   "#2E5C66",
+   "#4A8C96",
+   "#79BFC4",
+   "#AEE3E3",
+   "#EFFFFF"
+  ],
+  "fur": [
+   "#2A1A0C",
+   "#3C2612",
+   "#51361E",
+   "#6B4B30",
+   "#8E6749"
+  ],
+  "fire": [
+   "#6A1A06",
+   "#B0400E",
+   "#E8781C",
+   "#F8B840",
+   "#FFF2A8"
+  ],
+  "stone": [
+   "#2A2B31",
+   "#41434C",
+   "#5E616B",
+   "#838691",
+   "#AEB1BA"
+  ]
+ },
+ "colors": {
+  "black": "#050302",
+  "white": "#FFFBEF",
+  "shadow": "#1E1410"
+ },
+ "chars": {
+  "o": "outline"
+ }
+}
