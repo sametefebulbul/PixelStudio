@@ -1330,6 +1330,31 @@ def main(argv):
         C = convert(Image.open(args[0]), size, None if pal == "none" else pal, colors)
         C.save(out, preview=True)
         print("wrote", out)
+    elif cmd == "snap":
+        # Palette-index strictness: every opaque pixel -> nearest palette colour (no resize). With --grid, first repair the
+        # pixel grid of an enlarged/blurred image using proper-pixel-art (optional dependency, MIT; skipped if missing).
+        pal = _arg(args, "--palette", DEFAULT_PALETTE)
+        out = _arg(args, "-o") or os.path.splitext(args[0])[0] + "_snap.png"
+        im = Image.open(args[0]).convert("RGBA")
+        if "--grid" in args:
+            try:
+                from proper_pixel_art.image import pixelate
+                im = pixelate(im).image.convert("RGBA")
+            except Exception as ex:  # noqa: BLE001
+                print("grid repair skipped:", ex)
+        C = Canvas(im.width, im.height, pal)
+        px_ = im.load()
+        off = 0
+        for y in range(im.height):
+            for x in range(im.width):
+                q = px_[x, y]
+                if q[3] >= 128:
+                    c = hx(q)
+                    n = C.pal.nearest(c)
+                    off += n != c
+                    C.g[y][x] = n
+        C.save(out, preview=False)
+        print("wrote %s (%d pixels moved onto palette)" % (out, off))
     elif cmd == "variant":
         # Recolor an existing on-style sprite (kitbash): snap to palette, then swap material ramps.
         out = _arg(args, "-o")
