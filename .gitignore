@@ -9,3 +9,4 @@ __pycache__/
 .DS_Store
 bench/runs/
 bench/results/
+.venv-ext/
