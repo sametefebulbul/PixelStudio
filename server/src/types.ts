@@ -16,6 +16,8 @@ export interface Settings {
   dither: boolean;
   tones: number; // 3..5 per material
   detail: "low" | "medium" | "high";
+  maxToolCalls?: number; // agent budget (0 = unlimited); default 45 for non-Claude providers
+  maxMinutes?: number; // agent time budget (0 = unlimited); default 10 for non-Claude providers
   maxRounds: number; // fix rounds 0..5
   negative: string; // things to avoid
   method?: "procedural" | "grid" | "hybrid"; // how the artist works (see engine SKILL.md)

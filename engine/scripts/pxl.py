@@ -18,7 +18,7 @@ CLI:
     pxl.py diff    <a.png> <b.png> [--region x0,y0,x1,y1]   changed pixels inside/outside a region (JSON)
     pxl.py crop    <png> --region x0,y0,x1,y1 [-o zoom.png] [--scale 8] [--ascii]
     pxl.py palette-from <png> [-o pal.json] [--name N]      palette (hue-grouped ramps) from any image
-    render extras: --step-dir DIR (or env PXL_STEP_DIR) saves every render as DIR/step_###.png + lint json; --json
+    render extras: --show (also print the ASCII view), --step-dir DIR (or env PXL_STEP_DIR) saves every render as DIR/step_###.png + lint json; --json
     pxl.py ramp    <#hex> [n]                     generate a hue-shifted ramp
 Colors anywhere: "#rrggbb", "ramp.i" (i: 0 darkest .. n-1 lightest), "outline", a palette char, or None (transparent).
 """
@@ -1235,6 +1235,8 @@ def main(argv):
             print("wrote %s (%dx%d)%s  lint score %d" % (out, C.w, C.h, " + preview " + os.path.splitext(out)[0] + "_x8.png" if prev else "", sc))
             for l in F:
                 print("  " + l)
+            if _flag(args, "--show"):  # one call = render + lint + ASCII view (saves an agent turn)
+                print(show(C, False))
     elif cmd == "diff":
         # pixel difference between two images; with --region, reports changes outside the region separately
         region = _arg(args, "--region")

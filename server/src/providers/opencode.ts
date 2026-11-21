@@ -29,6 +29,24 @@ function models(): { id: string; label: string; vision: boolean }[] {
   }
 }
 
+/** Map the UI effort (low|medium|high) to a reasoning level the model really offers; returns "model#variant" or the plain id.
+ *  Thinking time was ~80% of a DeepSeek run, so "medium" (the UI default) maps to the cheapest level. */
+export function withEffort(model: string, effort?: string): string {
+  if (model.includes("#")) return model;
+  const f = join(homedir(), ".cache", "opencode", "models.json");
+  try {
+    const [prov, ...rest] = model.split("/");
+    const mm = JSON.parse(readFileSync(f, "utf-8"))?.[prov]?.models?.[rest.join("/")];
+    const values: string[] = (mm?.reasoning_options ?? []).find((o: any) => o.type === "effort")?.values ?? [];
+    if (!values.length) return model;
+    const want = effort === "high" ? "high" : effort === "low" || effort === "medium" || !effort ? "low" : effort;
+    const pick = values.includes(want) ? want : want === "low" ? values[0] : values[values.length - 1];
+    return `${model}#${pick}`;
+  } catch {
+    return model;
+  }
+}
+
 export const opencode: Provider = {
   id: "opencode",
   vision: (model) => models().find((m) => m.id === model)?.vision ?? false,
@@ -53,7 +71,7 @@ export const opencode: Provider = {
     return text;
   },
   async draw(a: DrawArgs) {
-    const args = ["run", "--standalone", "--format", "json", "-m", a.model, "--auto"];
+    const args = ["run", "--standalone", "--format", "json", "-m", withEffort(a.model, a.effort), "--auto"];
     for (const f of a.attach ?? []) args.push("-f", f);
     args.push(a.prompt);
     let sawText = false;

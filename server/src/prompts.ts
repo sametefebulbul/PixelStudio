@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { PXL, PYTHON, SKILL_MD, ENGINE } from "./config.js";
 import type { PaletteInfo } from "./engine.js";
 import type { Comment, Settings, Spec } from "./types.js";
@@ -44,6 +45,30 @@ ${SPEC_SCHEMA_HINT}`;
 
 const skillText = () => readFileSync(SKILL_MD, "utf-8");
 
+const RECIPES: [RegExp, string][] = [
+  [/helm|helmet|hood|cap|hat|crown/i, "helm"],
+  [/sword|blade|dagger|knife|axe|spear|mace|hammer|staff|wand/i, "sword"],
+  [/potion|flask|bottle|vial|jar|urn|mug|cup/i, "potion"],
+  [/pouch|bag|sack|purse/i, "pouch"],
+  [/scroll|book|letter|map|paper/i, "scroll"],
+  [/shield|buckler/i, "shield_round"],
+];
+
+/** Technique notes + the recipes closest to the subject (so the agent does not have to go and read them: reading cost ~45% of all turns). */
+export function knowledgeText(spec: Spec): string {
+  const hay = `${spec.title} ${spec.subject}`;
+  const names = RECIPES.filter(([re]) => re.test(hay)).map(([, n]) => n);
+  const pick = (names.length ? names : ["sword"]).slice(0, 2);
+  const parts: string[] = [];
+  const tech = join(ENGINE, "references", "technique.md");
+  if (existsSync(tech)) parts.push("## Technique notes\n" + readFileSync(tech, "utf-8"));
+  for (const n of pick) {
+    const f = join(ENGINE, "references", "recipes", n + ".py");
+    if (existsSync(f)) parts.push(`## Recipe: ${n}.py (a complete working draw script; copy its structure)\n\`\`\`python\n${readFileSync(f, "utf-8")}\n\`\`\``);
+  }
+  return parts.join("\n\n");
+}
+
 /** Instructions for the drawing agent. `inline` = embed SKILL.md (API providers have no file access to it). */
 export function drawPrompt(spec: Spec, s: Settings, opts: { k: number; seed: number; vision: boolean; inline: boolean; startFrom?: string }): string {
   const variety =
@@ -52,7 +77,7 @@ export function drawPrompt(spec: Spec, s: Settings, opts: { k: number; seed: num
       : `This is candidate #${opts.k + 1} of several: keep the brief, but choose a noticeably different take (proportions, part shapes, tone placement or detail choice). Use seed ${opts.seed} for any textures.`;
   return `You are a pixel artist working with the pxl toolkit. ${opts.inline ? "The skill guide is below." : `First read the skill guide: ${SKILL_MD} and the technique notes ${ENGINE}/references/technique.md (recipes in ${ENGINE}/references/recipes, CC0 example sprites (PNG + grid JSON) in ${ENGINE}/references/examples).`}
 
-Work ONLY inside the current directory (its absolute path is given at the end of this brief); use relative file names for everything you create (draw.py, grid.json, final.png) and never create files elsewhere, never in the engine folder or its parents.
+${opts.inline ? "Everything you need (skill guide, technique notes, a matching recipe) is included below. Do NOT read other files, do NOT open pxl.py or the examples folder, do NOT explore the engine: start drawing immediately. Every extra tool call costs minutes.\n" : ""}Work ONLY inside the current directory (its absolute path is given at the end of this brief); use relative file names for everything you create (draw.py, grid.json, final.png) and never create files elsewhere, never in the engine folder or its parents.
 ${methodBlock(s.method ?? "hybrid", spec.size)}
 - Every render is captured automatically as a numbered step the user watches live, so render after each meaningful stage — at least 3 renders.
 - Check: ${PYTHON} ${PXL} lint final.png${opts.vision ? "  and LOOK at final_x8.png after each render." : `  and ${PYTHON} ${PXL} show final.png (you cannot see images: use the ASCII view, silhouette and lint).`}
@@ -66,13 +91,13 @@ ${spec.prompt}
 
 Canvas ${spec.size}x${spec.size}, palette "${spec.palette}". Light ${spec.style.light}; outline ${spec.style.outline}; shading ${spec.style.shading}; band-edge dither ${spec.style.dither ? "on" : "off"}; ${spec.style.tones} tones per material; detail ${spec.style.detail}.
 Avoid: ${[...spec.avoid, s.negative].filter(Boolean).join("; ") || "(nothing special)"}
-${opts.inline ? "\n## Skill guide\n" + skillText() : ""}`;
+${opts.inline ? "\n## Skill guide\n" + skillText() + "\n\n" + knowledgeText(spec) : ""}`;
 }
 
 /** How the artist works. "hybrid" = procedural block-in then hand-painting the dumped grid. */
 export function methodBlock(method: string, size: number): string {
-  const renderPy = `${PYTHON} ${PXL} render draw.py -o final.png --preview`;
-  const renderGrid = `${PYTHON} ${PXL} render grid.json -o final.png --preview`;
+  const renderPy = `${PYTHON} ${PXL} render draw.py -o final.png --preview --show`;
+  const renderGrid = `${PYTHON} ${PXL} render grid.json -o final.png --preview --show`;
   if (method === "procedural")
     return `Method: PROCEDURAL. Write ./draw.py (\`from pxl import *\`, masks -> shade -> outline -> details, canvas left in global C) and render with: ${renderPy}`;
   if (method === "grid")
@@ -81,7 +106,7 @@ Plan the silhouette row by row first, then flat colors, shadow/light, highlights
   return `Method: HYBRID.
 1) Block in with ./draw.py (\`from pxl import *\`, masks -> shade -> outline): correct silhouette, real-world proportions and base tones. Render: ${renderPy}
 2) Make it editable: ${PYTHON} ${PXL} dump final.png --snap -o grid.json   (each row is one line)
-3) Hand-paint grid.json like a pixel artist, row by row: crisp highlights and glints, texture hints (2-3 px), clean curves and 1:1/2:1 diagonals, manual anti-aliasing in inner corners, inner separation lines, remove noise. Add legend entries if needed. Render after each pass: ${renderGrid}`;
+3) Hand-paint grid.json like a pixel artist, row by row: crisp highlights and glints, texture hints (2-3 px), clean curves and 1:1/2:1 diagonals, manual anti-aliasing in inner corners, inner separation lines, remove noise. Add legend entries if needed. Make as few, larger passes as possible (rewrite whole blocks of rows per edit, 2 passes max). Render after each pass: ${renderGrid}   (the output already contains the lint report and the ASCII view: do not call lint/show again).`;
 }
 
 /** Art-director round: look at the sprite and write the 3 worst problems (no edits). */

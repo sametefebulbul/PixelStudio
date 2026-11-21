@@ -184,7 +184,20 @@ async function runAgent(pid: string, rid: string, k: number) {
   controllers.set(rid + "/" + k, ctrl);
   setStatus(pid, rid, k, { status: "running", startedAt: Date.now() });
   const stop = watchSteps(pid, rid, k);
-  const inline = s.provider === "anthropic-api" || s.provider === "openai-api";
+  // Budget: unbounded agent loops ran 15-70 min. Past the limit the agent is stopped and the best step so far becomes the result.
+  const slow = s.provider !== "claude-cli";
+  const maxCalls = s.maxToolCalls ?? (slow ? 45 : 0);
+  const maxMs = (s.maxMinutes ?? (slow ? 10 : 0)) * 60_000;
+  let calls = 0;
+  let budgetHit = "";
+  const hit = (why: string) => {
+    if (budgetHit || ctrl.signal.aborted) return;
+    budgetHit = why;
+    emit(pid, rid, { t: "warn", k, text: `Budget reached (${why}): stopping the artist, keeping the best version so far.` });
+    ctrl.abort();
+  };
+  const budgetTimer = maxMs ? setTimeout(() => hit(`${Math.round(maxMs / 60000)} min`), maxMs) : undefined;
+  const inline = s.provider !== "claude-cli"; // no file-reading detours for slow/remote models: embed the guide + recipes
   let prompt: string;
   const attach: string[] = [];
   try {
@@ -229,10 +242,21 @@ async function runAgent(pid: string, rid: string, k: number) {
       env: { PXL_STEP_DIR: join(cwd, "steps"), PYTHONDONTWRITEBYTECODE: "1" },
       signal: ctrl.signal,
       attach,
-      onEvent: (e) => emit(pid, rid, { ...e, k } as any),
+      onEvent: (e) => {
+        if (e.t === "tool" && maxCalls && ++calls > maxCalls) hit(`${maxCalls} tool calls`);
+        emit(pid, rid, { ...e, k } as any);
+      },
     });
+    clearTimeout(budgetTimer);
+    if (budgetHit) {
+      // keep the highest-scoring step as the result when the agent never wrote final.png
+      const sd = join(cwd, "steps");
+      const steps = existsSync(sd) ? readdirSync(sd).filter((f) => /^step_\d+\.json$/.test(f)).sort() : [];
+      if (steps.length && !existsSync(join(cwd, "final.png"))) copyFileSync(join(sd, steps[steps.length - 1].replace(".json", ".png")), join(cwd, "final.png"));
+    }
+    const ended = res.ok || !!budgetHit;
     // automatic art-director rounds (new drawings only; region fixes are already targeted)
-    const rounds = run.kind === "fix" ? 0 : Math.max(0, Math.min(3, s.critic ?? 0));
+    const rounds = run.kind === "fix" || budgetHit ? 0 : Math.max(0, Math.min(3, s.critic ?? 0));
     for (let r = 0; r < rounds && res.ok && !ctrl.signal.aborted && existsSync(join(cwd, "final.png")); r++) {
       emit(pid, rid, { t: "text", k, text: `— art director round ${r + 1}/${rounds}` });
       await pxl(["render", join(cwd, "final.png"), "-o", join(cwd, "crit.png"), "--preview"]);
@@ -268,12 +292,13 @@ async function runAgent(pid: string, rid: string, k: number) {
         updateProject(pid, (p) => p.comments.forEach((c) => run.commentIds?.includes(c.id) && ((c.status = "applied"), (c.appliedIn = rid))));
       }
       emit(pid, rid, { t: "final", k, url: fileUrl(final) + "?t=" + Date.now(), score });
-      setStatus(pid, rid, k, { status: res.ok ? "done" : "error", error: res.ok ? undefined : res.error, score, endedAt: Date.now(), outsideChange });
+      setStatus(pid, rid, k, { status: ended ? "done" : "error", error: ended ? (budgetHit ? `budget: ${budgetHit}` : undefined) : res.error, score, endedAt: Date.now(), outsideChange });
     } else {
-      setStatus(pid, rid, k, { status: ctrl.signal.aborted ? "cancelled" : "error", error: res.error ?? "no final.png produced", endedAt: Date.now() });
+      setStatus(pid, rid, k, { status: ctrl.signal.aborted && !budgetHit ? "cancelled" : "error", error: budgetHit ? `budget: ${budgetHit}, no result` : (res.error ?? "no final.png produced"), endedAt: Date.now() });
     }
   } catch (e) {
     stop();
+    clearTimeout(budgetTimer);
     setStatus(pid, rid, k, { status: "error", error: String(e), endedAt: Date.now() });
   } finally {
     controllers.delete(rid + "/" + k);
