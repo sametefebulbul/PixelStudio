@@ -229,7 +229,13 @@ async function runAgent(pid: string, rid: string, k: number) {
       let extra = "";
       if (run.spec.route === "convert" && s.reference) {
         await pxl(["convert", s.reference, "--size", String(run.spec.size), "--palette", run.spec.palette, "-o", join(cwd, "start.png")]);
-        extra = `\n\nThe user's reference image was converted to ./start.png (${run.spec.size}px, on palette). Begin with \`C = load("start.png")\` and refine it (clean shapes, shading, outline, details) instead of drawing from scratch.`;
+        copyFileSync(s.reference, join(cwd, "reference" + (s.reference.match(/\.[a-z]+$/i)?.[0] ?? ".png")));
+        const refName = readdirSync(cwd).find((f) => f.startsWith("reference."))!;
+        if (vision && s.provider === "opencode") attach.push(join(cwd, refName));
+        extra = `\n\n## Reference image (the look the user wants)
+- ./${refName} is the user's reference picture${vision ? ": LOOK at it first (zoom into the guard, blade edge, glowing parts)" : ""}.
+- ./start.png is an automatic ${run.spec.size}px conversion on the palette (background removed): it has the right silhouette and placement but muddy colors and lost detail.
+Repaint it as a clean, hand-made pixel sprite: keep the silhouette and the signature design features of the reference (shapes, spikes, curves, proportions), restore the key contrasts and glows of the reference (e.g. dark body vs bright glowing veins/edges) with palette ramps, 1-2px clean lines instead of noise. Start from \`C = load("start.png")\` for the silhouette, then rebuild shading with masks/ramps or edit a dumped grid. Do not just re-render start.png.`;
       } else if ((run.spec.route === "kitbash" || run.spec.route === "variant") && s.baseItem) {
         extra = `\n\nBase sprite to build from: ${s.baseItem}. Use \`A = load(path)\`, crop()/stamp()/recolor_hue() to reuse its hand-made pixels; draw only what is new.`;
       }

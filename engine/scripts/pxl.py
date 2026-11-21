@@ -13,7 +13,7 @@ CLI:
     pxl.py show    <png|json|py> [--lum]          ASCII view with ruler (+ luminance map)
     pxl.py lint    <png|json|py> [--sym x|y] [--budget N] [--palette P] [--light nw]
     pxl.py dump    <png> [-o grid.json] [--palette P] [--snap]   PNG -> legend+rows grid (few-shot examples; --snap = nearest palette colors)
-    pxl.py convert <png> --size N [--palette P] [--colors K] [-o out.png]   any image -> clean pixel art
+    pxl.py convert <png> --size N [--palette P] [--colors K] [--ramps body,glow] [--no-enhance] [-o out.png]   any image -> clean pixel art
     pxl.py palette [name]                         list ramps / colors / default chars
     pxl.py diff    <a.png> <b.png> [--region x0,y0,x1,y1]   changed pixels inside/outside a region (JSON)
     pxl.py crop    <png> --region x0,y0,x1,y1 [-o zoom.png] [--scale 8] [--ascii]
@@ -1154,8 +1154,60 @@ def _cdist(a, b):
 
 # ---------------------------------------------------------------- convert (any image -> palette pixel art)
 
-def convert(im, size, palette=None, colors=None, do_outline=True):
+def cutout_background(im, thresh=28):
+    """Images without transparency (typical AI illustrations on a flat dark/light background): make the background transparent.
+    Flood-fills from the four corners with a color tolerance, so dark parts INSIDE the object survive."""
+    from PIL import ImageDraw
     im = im.convert("RGBA")
+    if im.getextrema()[3][0] < 255:
+        return im  # already has transparency
+    w, h = im.size
+    key = (255, 0, 255)
+    rgb_im = im.convert("RGB")
+    for pt in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        if rgb_im.getpixel(pt) != key:
+            ImageDraw.floodfill(rgb_im, pt, key, thresh=thresh)
+    out = im.copy()
+    px_rgb, px = rgb_im.load(), out.load()
+    cleared = 0
+    for y in range(h):
+        for x in range(w):
+            if px_rgb[x, y] == key:
+                px[x, y] = (0, 0, 0, 0)
+                cleared += 1
+    # a cutout that removed almost nothing or almost everything was not a background: keep the original
+    return out if 0.05 < cleared / float(w * h) < 0.97 else im
+
+
+def two_ramp_map(C, dark, glow, boost=True):
+    """Map every pixel to a 'body' ramp (dark/neutral parts) or a 'glow' ramp (bright, saturated parts such as lava veins, gems, flames).
+    Restores the body-vs-glow contrast that nearest-color matching loses on AI illustrations."""
+    import colorsys
+    D = [rgb(c) for c in C.pal.ramps[dark]]
+    G = [rgb(c) for c in C.pal.ramps[glow]]
+    for y in range(C.h):
+        for x in range(C.w):
+            c = C.g[y][x]
+            if not c:
+                continue
+            r, g, b = rgb(c)
+            h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+            if (r > 150 and r > g * 1.25 and s > 0.45) or v > 0.78:
+                t = min(1.0, max(0.0, (v - 0.45) / 0.55))
+                C.g[y][x] = hx(G[min(len(G) - 1, int(t * len(G)))])
+            else:
+                C.g[y][x] = hx(D[min(len(D) - 2, max(0, int((v / 0.75) * (len(D) - 1))))])
+    return C
+
+
+def convert(im, size, palette=None, colors=None, do_outline=True, ramps=None, enhance=True):
+    im = cutout_background(im)
+    if enhance and im.mode == "RGBA":  # AI illustrations are dark and soft: more contrast/saturation survives downscaling
+        from PIL import ImageEnhance
+        a = im.split()[3]
+        rgb_im = ImageEnhance.Color(ImageEnhance.Contrast(im.convert("RGB")).enhance(1.35)).enhance(1.4)
+        im = rgb_im.convert("RGBA")
+        im.putalpha(a)
     bb = im.getbbox()
     if bb:
         im = im.crop(bb)
@@ -1180,6 +1232,8 @@ def convert(im, size, palette=None, colors=None, do_outline=True):
             raw[k] = hx(q.getpixel((i, 0)))
     for (x, y), c in raw.items():
         C.g[y][x] = C.pal.nearest(c) if palette else c
+    if ramps:
+        two_ramp_map(C, ramps[0], ramps[1])
     clean(C)
     if do_outline:
         f = C.filled()
@@ -1329,7 +1383,8 @@ def main(argv):
         pal = _arg(args, "--palette", DEFAULT_PALETTE)
         colors = _arg(args, "--colors", None, int)
         out = _arg(args, "-o") or os.path.splitext(args[0])[0] + "_px.png"
-        C = convert(Image.open(args[0]), size, None if pal == "none" else pal, colors)
+        ramps = _arg(args, "--ramps")  # "body,glow" e.g. stone,fire: two-ramp mapping for dark illustrations with glowing parts
+        C = convert(Image.open(args[0]), size, None if pal == "none" else pal, colors, ramps=ramps.split(",") if ramps else None, enhance=not _flag(args, "--no-enhance"))
         C.save(out, preview=True)
         print("wrote", out)
     elif cmd == "snap":
