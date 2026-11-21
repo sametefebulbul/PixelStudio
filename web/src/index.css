@@ -140,3 +140,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .ramp { display: flex; gap: 2px; }
 .ramp span { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 pre.code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; max-height: 60vh; font-family: var(--mono); font-size: 12px; margin: 0; }
+
+/* sprite sheet panel */
+.sheetpanel { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.sheetpanel .pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.sheetpanel .piece { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border-radius: 8px; border: 1px solid var(--line, #3a2f27); opacity: 0.55; }
+.sheetpanel .piece.on { opacity: 1; border-color: var(--accent, #d9a441); }
+.sheetpanel .piece select { width: 100%; }
+.sheetpanel .charpack { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line, #3a2f27); padding-top: 8px; }

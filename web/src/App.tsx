@@ -143,6 +143,26 @@ export default function App() {
       setBusy("");
     }
   }
+  const [lastConvertRun, setLastConvertRun] = useState<string | null>(null);
+  async function convertPieces(pieces: { path: string; label?: string; w: number; h: number }[]): Promise<string | null> {
+    if (!pid || !settings) return null;
+    setBusy("convert");
+    setErr("");
+    try {
+      const r = await api.convertPieces(pid, settings, pieces);
+      setRid(r.id);
+      setSel(0);
+      setDraft(null);
+      setLastConvertRun(r.id);
+      await reloadProject();
+      return r.id;
+    } catch (e) {
+      setErr(String(e));
+      return null;
+    } finally {
+      setBusy("");
+    }
+  }
   async function convertNow() {
     if (!pid || !settings) return;
     setBusy("convert");
@@ -205,7 +225,7 @@ export default function App() {
       <div className="main">
         <div className="col left">
           {pid && <LeftPanel s={s} pid={pid} brief={brief} setBrief={setBrief} settings={settings} setSettings={setSettings}
-            providers={status.providers} palettes={palettes} library={library} busy={busy === "refine" || busy === "convert"} onRefine={refine} onConvert={convertNow} />}
+            providers={status.providers} palettes={palettes} library={library} busy={busy === "refine" || busy === "convert"} onRefine={refine} onConvert={convertNow} onConvertPieces={convertPieces} lastConvertRun={lastConvertRun} />}
         </div>
 
         <div className="col">

@@ -1,3 +1,4 @@
+import { SheetPanel } from "./SheetPanel";
 import { api } from "../api";
 import type { Strings } from "../i18n";
 import type { LibItem, Palette, ProviderStatus, Settings } from "../types";
@@ -15,12 +16,14 @@ interface Props {
   busy: boolean;
   onRefine: () => void;
   onConvert: () => void;
+  onConvertPieces: (pieces: { path: string; label?: string; w: number; h: number }[]) => Promise<string | null>;
+  lastConvertRun: string | null;
 }
 
 const SIZES = [16, 24, 32, 48, 64, 96, 128];
 const LIGHTS = ["nw", "n", "ne", "w", "e", "sw", "s", "se"];
 
-export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, providers, palettes, library, busy, onRefine, onConvert }: Props) {
+export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, providers, palettes, library, busy, onRefine, onConvert, onConvertPieces, lastConvertRun }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setSettings({ ...settings, [k]: v });
   const prov = providers.find((p) => p.id === settings.provider);
   const pal = palettes.find((p) => p.name === settings.palette);
@@ -196,6 +199,7 @@ export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, prov
               </select>
             </label>
             <button className="btn primary" disabled={busy} onClick={onConvert} title={s.convertHint}>⚡ {s.convertNow}</button>
+            <SheetPanel s={s} pid={pid} settings={settings} busy={busy} lastRun={lastConvertRun} onConvert={onConvertPieces} />
           </>
         )}
       </div>

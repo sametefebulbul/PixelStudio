@@ -201,11 +201,55 @@ app.post("/api/projects/:pid/fix", async (c) => {
 app.post("/api/projects/:pid/convert", async (c) => {
   const b = await c.req.json();
   try {
-    return c.json(startConvert(c.req.param("pid"), b.settings as Settings));
+    return c.json(startConvert(c.req.param("pid"), b.settings as Settings, Array.isArray(b.pieces) ? b.pieces : undefined));
   } catch (e) {
     return fail(c, e);
   }
 });
+/** Sprite/character sheet -> separate pieces (found automatically). */
+app.post("/api/projects/:pid/split", async (c) => {
+  const pid = c.req.param("pid");
+  const b = await c.req.json();
+  const src = String(b.path ?? "");
+  if (!src.startsWith(PROJECTS) || !existsSync(src)) return fail(c, "image not found");
+  const dir = join(projectDir(pid), "uploads", newId("split"));
+  mkdirSync(dir, { recursive: true });
+  const r = await pxl(["split", src, "-o", dir, "--gap", String(Number(b.gap ?? 1))], { timeoutMs: 120_000 });
+  if (r.code !== 0) return fail(c, r.stderr.slice(0, 300), 500);
+  const pieces = (JSON.parse(r.stdout) as { file: string; w: number; h: number; area: number }[]).map((p) => ({ ...p, path: join(dir, p.file), url: fileUrl(join(dir, p.file)) }));
+  return c.json({ pieces });
+});
+
+/** Character pack: converted views (south/north/east/west) -> aligned set, strip sheet and anchors JSON. */
+app.post("/api/projects/:pid/character", async (c) => {
+  const pid = c.req.param("pid");
+  const b = await c.req.json();
+  const roles = (b.roles ?? {}) as Record<string, string>;
+  const args: string[] = [];
+  for (const [k, role] of Object.entries(roles)) {
+    if (!["south", "north", "east", "west"].includes(role)) continue;
+    const f = join(variantDir(pid, b.run, Number(k)), "final.png");
+    if (existsSync(f)) args.push(`${role}=${f}`);
+  }
+  if (!args.length) return fail(c, "assign at least one direction (south/north/east/west)");
+  const name = String(b.name || "character").replace(/[^\p{L}\p{N}_-]+/gu, "_");
+  const outDir = join(projectDir(pid), "exports", name);
+  mkdirSync(outDir, { recursive: true });
+  const r = await pxl(["char-pack", "--name", name, "--out", outDir, ...(b.mirror === false ? ["--no-mirror"] : []), ...args]);
+  if (r.code !== 0) return fail(c, r.stderr.slice(0, 300), 500);
+  const info = JSON.parse(r.stdout);
+  if (b.dest) {
+    try {
+      mkdirSync(String(b.dest), { recursive: true });
+      for (const f of [...Object.values<any>(info.directions).map((d) => d.file), info.sheet, name + ".json"]) copyFileSync(join(outDir, f), join(String(b.dest), f));
+    } catch (e) {
+      return fail(c, e);
+    }
+  }
+  const files = [...Object.values<any>(info.directions).map((d) => d.file), info.sheet, name + ".json"].map((f) => ({ name: f, path: join(outDir, f), url: fileUrl(join(outDir, f)) }));
+  return c.json({ info, files });
+});
+
 /** "Bundan devam et": a whole-canvas instruction on a chosen variant. */
 app.post("/api/projects/:pid/continue", async (c) => {
   const pid = c.req.param("pid");

@@ -21,6 +21,10 @@ export const api = {
   refine: (pid: string, brief: string, settings: Settings) => j<Spec>("POST", `/api/projects/${pid}/refine`, { brief, settings }),
   startRun: (pid: string, spec: Spec, settings: Settings) => j<Run>("POST", `/api/projects/${pid}/runs`, { spec, settings }),
   convert: (pid: string, settings: Settings) => j<Run>("POST", `/api/projects/${pid}/convert`, { settings }),
+  split: (pid: string, path: string) => j<{ pieces: { file: string; w: number; h: number; area: number; path: string; url: string }[] }>("POST", `/api/projects/${pid}/split`, { path }),
+  convertPieces: (pid: string, settings: Settings, pieces: { path: string; label?: string; w: number; h: number }[]) => j<Run>("POST", `/api/projects/${pid}/convert`, { settings, pieces }),
+  character: (pid: string, body: { run: string; name: string; roles: Record<string, string>; mirror: boolean; dest?: string }) =>
+    j<{ info: unknown; files: { name: string; path: string; url: string }[] }>("POST", `/api/projects/${pid}/character`, body),
   run: (pid: string, rid: string) => j<Run>("GET", `/api/projects/${pid}/runs/${rid}`),
   cancel: (pid: string, rid: string, k?: number) => j("POST", `/api/projects/${pid}/runs/${rid}/cancel`, { k }),
   star: (pid: string, rid: string, k: number) => j("POST", `/api/projects/${pid}/runs/${rid}/variants/${k}/star`),

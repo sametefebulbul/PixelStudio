@@ -13,6 +13,8 @@ CLI:
     pxl.py show    <png|json|py> [--lum]          ASCII view with ruler (+ luminance map)
     pxl.py lint    <png|json|py> [--sym x|y] [--budget N] [--palette P] [--light nw]
     pxl.py dump    <png> [-o grid.json] [--palette P] [--snap]   PNG -> legend+rows grid (few-shot examples; --snap = nearest palette colors)
+    pxl.py split <sheet.png> -o DIR [--gap 1] [--min 0.004]       sheet -> pieces (piece_NN.png + pieces.json)
+    pxl.py char-pack --name N --out DIR south=a.png north=b.png east=c.png [west=d.png]   aligned character set + strip + json
     pxl.py convert <png> --size N [--palette P] [--colors K] [--ramps body,glow] [--no-enhance] [-o out.png]   any image -> clean pixel art
     pxl.py palette [name]                         list ramps / colors / default chars
     pxl.py diff    <a.png> <b.png> [--region x0,y0,x1,y1]   changed pixels inside/outside a region (JSON)
@@ -29,7 +31,7 @@ import os
 import random
 import sys
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAL_DIR = os.path.join(HERE, "..", "assets", "palettes")
@@ -1291,6 +1293,111 @@ def convert(im, size, palette=None, colors=None, do_outline=True, ramps=None, en
         outline(C)
     return C
 
+
+# ---------------------------------------------------------------- split (sheet -> pieces) and character pack
+
+def split_sheet(im, gap=1, min_frac=0.004):
+    """Find the separate pieces on a sprite/character sheet: connected regions of the (cut-out) alpha, after merging parts that are
+    close together (staff + body, sparkles). Returns [(box, piece_image, area_fraction)] in reading order (rows top-to-bottom, then left-to-right)."""
+    from PIL import ImageFilter
+    if max(im.size) > 1600:
+        im = im.copy()
+        im.thumbnail((1600, 1600), Image.LANCZOS)
+    im = cutout_background(im)
+    W, H = im.size
+    f = max(1, max(W, H) // 300)
+    a = im.split()[3]
+    small = a.resize((max(1, W // f), max(1, H // f)), Image.BOX).point(lambda v: 255 if v >= 64 else 0)
+    merged = small.filter(ImageFilter.MaxFilter(2 * gap + 1)) if gap > 0 else small
+    mw, mh = merged.size
+    mp = merged.load()
+    seen = [[False] * mw for _ in range(mh)]
+    comps = []
+    for y0 in range(mh):
+        for x0 in range(mw):
+            if mp[x0, y0] and not seen[y0][x0]:
+                stack = [(x0, y0)]
+                seen[y0][x0] = True
+                pts = []
+                while stack:
+                    x, y = stack.pop()
+                    pts.append((x, y))
+                    for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                        if 0 <= nx < mw and 0 <= ny < mh and mp[nx, ny] and not seen[ny][nx]:
+                            seen[ny][nx] = True
+                            stack.append((nx, ny))
+                comps.append(pts)
+    total = float(sum(len(c) for c in comps)) or 1.0
+    out = []
+    for pts in comps:
+        frac = len(pts) / total
+        if frac < min_frac:
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        box = (min(xs) * f, min(ys) * f, min(W, (max(xs) + 1) * f), min(H, (max(ys) + 1) * f))
+        bw, bh = box[2] - box[0], box[3] - box[1]
+        if min(bw, bh) < 0.08 * max(bw, bh):  # divider lines, not sprites
+            continue
+        cm = Image.new("L", (mw, mh), 0)
+        cp = cm.load()
+        for x, y in pts:
+            cp[x, y] = 255
+        cm = cm.resize((mw * f, mh * f), Image.NEAREST).crop((0, 0, W, H))
+        piece = im.copy()
+        piece.putalpha(ImageChops.multiply(a, cm))
+        out.append((box, piece.crop(box), frac))
+    row_h = max(1, H // 6)
+    out.sort(key=lambda t: ((t[0][1] + t[0][3]) // 2 // row_h, t[0][0]))
+    return out
+
+
+DIRS = ["south", "west", "east", "north"]  # sheet order; south = facing the viewer
+
+
+def char_pack(views, name, outdir, mirror=True):
+    """Views {south|north|east|west: PIL image of an already pixelated sprite} -> aligned set on one canvas (feet on the same line,
+    horizontally centered), missing east/west mirrored from the other side, a strip sheet and a JSON with anchors."""
+    os.makedirs(outdir, exist_ok=True)
+    trimmed = {}
+    for d, im in views.items():
+        im = im.convert("RGBA")
+        bb = im.getbbox()
+        if bb:
+            trimmed[d] = im.crop(bb)
+    mirrored = []
+    if mirror:
+        if "east" in trimmed and "west" not in trimmed:
+            trimmed["west"] = trimmed["east"].transpose(Image.FLIP_LEFT_RIGHT)
+            mirrored.append("west")
+        elif "west" in trimmed and "east" not in trimmed:
+            trimmed["east"] = trimmed["west"].transpose(Image.FLIP_LEFT_RIGHT)
+            mirrored.append("east")
+    if not trimmed:
+        raise ValueError("no views")
+    CW = max(t.width for t in trimmed.values()) + 2
+    CH = max(t.height for t in trimmed.values()) + 2
+    info = {"name": name, "size": [CW, CH], "pivot": [CW // 2, CH - 2], "mirrored": mirrored, "directions": {}}
+    sheet = Image.new("RGBA", (CW * len(trimmed), CH), (0, 0, 0, 0))
+    i = 0
+    for d in DIRS:
+        if d not in trimmed:
+            continue
+        t = trimmed[d]
+        canvas_im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        ox, oy = (CW - t.width) // 2, CH - 1 - t.height  # feet on the bottom line
+        canvas_im.alpha_composite(t, (ox, oy))
+        fn = "%s_%s.png" % (name, d)
+        canvas_im.save(os.path.join(outdir, fn))
+        sheet.alpha_composite(canvas_im, (i * CW, 0))
+        info["directions"][d] = {"file": fn, "frame": i, "bbox": [ox, oy, ox + t.width - 1, oy + t.height - 1], "head_top": oy, "feet_y": oy + t.height - 1, "center_x": ox + t.width // 2}
+        i += 1
+    sheet.save(os.path.join(outdir, "%s_sheet.png" % name))
+    info["sheet"] = "%s_sheet.png" % name
+    info["frame_order"] = [d for d in DIRS if d in trimmed]
+    json.dump(info, open(os.path.join(outdir, "%s.json" % name), "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    return info
+
 # ---------------------------------------------------------------- CLI
 
 def _arg(args, name, default=None, cast=str):
@@ -1340,6 +1447,30 @@ def main(argv):
                 print("  " + l)
             if _flag(args, "--show"):  # one call = render + lint + ASCII view (saves an agent turn)
                 print(show(C, False))
+    elif cmd == "split":
+        # sprite/character sheet -> separate pieces (piece_01.png ...) + pieces.json
+        outdir = _arg(args, "-o") or "pieces"
+        gap = _arg(args, "--gap", 1, int)
+        minf = _arg(args, "--min", 0.004, float)
+        os.makedirs(outdir, exist_ok=True)
+        res = []
+        for i, (box, piece, frac) in enumerate(split_sheet(Image.open(args[0]), gap, minf), 1):
+            fn = "piece_%02d.png" % i
+            piece.save(os.path.join(outdir, fn))
+            res.append({"file": fn, "box": list(box), "w": piece.width, "h": piece.height, "area": round(frac, 4)})
+        json.dump(res, open(os.path.join(outdir, "pieces.json"), "w"), indent=1)
+        print(json.dumps(res))
+    elif cmd == "char-pack":
+        # char-pack --name hero --out DIR south=a.png north=b.png east=c.png [west=d.png] [--no-mirror]
+        name = _arg(args, "--name", "character")
+        outdir = _arg(args, "--out", "character")
+        mir = not _flag(args, "--no-mirror")
+        views = {}
+        for a in args:
+            if "=" in a and a.split("=", 1)[0] in DIRS:
+                d, f = a.split("=", 1)
+                views[d] = Image.open(f)
+        print(json.dumps(char_pack(views, name, outdir, mir)))
     elif cmd == "diff":
         # pixel difference between two images; with --region, reports changes outside the region separately
         region = _arg(args, "--region")

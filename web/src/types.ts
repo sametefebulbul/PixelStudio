@@ -66,6 +66,7 @@ export interface Variant {
   startedAt?: number;
   endedAt?: number;
   starred?: boolean;
+  label?: string; // convert batch: what this piece is (e.g. "south", "portrait")
   preCriticStep?: number; // step number of the version before the art-director fix pass (kept so a worse fix can be undone)
   rating?: number;
   note?: string;

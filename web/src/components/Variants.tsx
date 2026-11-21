@@ -36,7 +36,7 @@ export function Variants({ s, run, views, selected, setSelected, onStar, onConti
             <button className={"starbtn" + (v.starred ? " on" : "")} title={s.star} onClick={(e) => { e.stopPropagation(); onStar(v.k); }}>★</button>
             <div className="thumb">{img(views[v.k]) ? <img src={img(views[v.k])} /> : <span className={"dot" + (v.status === "running" ? " run" : "")} />}</div>
             <div className="meta">
-              <span>#{v.k + 1}</span>
+              <span>#{v.k + 1}{v.label ? " " + v.label : ""}</span>
               <span className={v.status === "done" ? "" : v.status === "error" ? "err-text" : ""}>{v.status === "done" ? (v.rating ? "★".repeat(v.rating) : `${s.score} ${v.score ?? "–"}`) : s.status[v.status]}</span>
             </div>
           </div>

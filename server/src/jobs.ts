@@ -335,10 +335,20 @@ Repaint it as a clean, hand-made pixel sprite: keep the silhouette and the signa
   }
 }
 
-/** Convert route: reference image -> pixel art, deterministic (background cut-out, contrast, two-ramp mapping). No model, ~2 s. */
-export function startConvert(pid: string, settings: Settings): Run {
-  if (!settings.reference || !settings.reference.startsWith(PROJECTS) || !existsSync(settings.reference)) throw new Error("upload a reference image first");
-  const title = (settings.reference.split("/").pop() ?? "reference").replace(/\.[a-z0-9]+$/i, "");
+export interface ConvertPiece {
+  path: string; // image file inside the project's uploads
+  label?: string; // e.g. "south", "front view"
+  w?: number;
+  h?: number;
+}
+
+/** Convert route: reference image(s) -> pixel art, deterministic (background cut-out, contrast, two-ramp mapping). No model, ~2 s each.
+ *  Several pieces (from a split sheet) are converted at ONE common scale: the largest piece gets `settings.size`, the others proportionally. */
+export function startConvert(pid: string, settings: Settings, pieces?: ConvertPiece[]): Run {
+  const list = pieces?.length ? pieces : settings.reference ? [{ path: settings.reference }] : [];
+  if (!list.length) throw new Error("upload a reference image first");
+  for (const p of list) if (!p.path.startsWith(PROJECTS) || !existsSync(p.path)) throw new Error("reference image not found: " + p.path);
+  const title = (list[0].label || list[0].path.split("/").pop() || "reference").replace(/\.[a-z0-9]+$/i, "");
   const spec: Spec = {
     title: "Convert " + title, subject: "converted reference image", size: settings.size, route: "convert", composition: "", parts: [], details: [], avoid: [],
     palette: settings.palette,
@@ -347,7 +357,7 @@ export function startConvert(pid: string, settings: Settings): Run {
   };
   const run: Run = {
     id: newId("r"), projectId: pid, kind: "convert", createdAt: Date.now(), settings, spec,
-    variants: [{ k: 0, status: "queued", provider: settings.provider, model: "pxl convert", seed: settings.seed, steps: 0 }],
+    variants: list.map((p, k): Variant => ({ k, status: "queued", provider: settings.provider, model: "pxl convert", seed: settings.seed, steps: 0, label: p.label })),
   };
   saveRun(run);
   updateProject(pid, (p) => {
@@ -355,28 +365,34 @@ export function startConvert(pid: string, settings: Settings): Run {
     p.spec = spec;
     p.settings = settings;
   });
-  mkdirSync(join(variantDir(pid, run.id, 0), "steps"), { recursive: true });
-  void runConvertOps(pid, run);
+  const biggest = Math.max(...list.map((p) => Math.max(p.w ?? 0, p.h ?? 0)), 1);
+  list.forEach((p, k) => {
+    mkdirSync(join(variantDir(pid, run.id, k), "steps"), { recursive: true });
+    const dim = Math.max(p.w ?? 0, p.h ?? 0);
+    // common scale: px per source px is the same for every piece (the tallest one fills settings.size)
+    const size = list.length > 1 && dim ? Math.max(8, Math.round(((dim * (settings.size - 2)) / biggest)) + 2) : settings.size;
+    void runConvertOps(pid, run, k, p.path, size);
+  });
   return run;
 }
 
-async function runConvertOps(pid: string, run: Run) {
+async function runConvertOps(pid: string, run: Run, k: number, src: string, size: number) {
   const s = run.settings;
-  const cwd = variantDir(pid, run.id, 0);
-  setStatus(pid, run.id, 0, { status: "running", startedAt: Date.now() });
-  const args = ["convert", s.reference!, "--size", String(run.spec.size), "--palette", run.spec.palette, "--ramps", s.convertRamps || "auto", "-o", join(cwd, "start.png")];
-  emit(pid, run.id, { t: "tool", k: 0, name: "pxl convert", detail: args.slice(1).join(" ") });
+  const cwd = variantDir(pid, run.id, k);
+  setStatus(pid, run.id, k, { status: "running", startedAt: Date.now() });
+  const args = ["convert", src, "--size", String(size), "--palette", run.spec.palette, "--ramps", s.convertRamps || "auto", "-o", join(cwd, "start.png")];
+  emit(pid, run.id, { t: "tool", k, name: "pxl convert", detail: args.slice(1).join(" ") });
   const r = await pxl(args);
-  emit(pid, run.id, { t: "tool_result", k: 0, ok: r.code === 0, detail: (r.stdout + r.stderr).trim().slice(0, 400) });
-  if (r.code !== 0) return setStatus(pid, run.id, 0, { status: "error", error: r.stderr.slice(0, 300), endedAt: Date.now() });
+  emit(pid, run.id, { t: "tool_result", k, ok: r.code === 0, detail: (r.stdout + r.stderr).trim().slice(0, 400) });
+  if (r.code !== 0) return setStatus(pid, run.id, k, { status: "error", error: r.stderr.slice(0, 300), endedAt: Date.now() });
   copyFileSync(join(cwd, "start.png"), join(cwd, "final.png"));
   // the script a later region-fix round edits: starts from the converted sprite
   writeFileSync(join(cwd, "draw.py"), 'from pxl import *\nC = load("start.png")\n');
   await pxl(["render", join(cwd, "final.png"), "-o", join(cwd, "final.png")], { env: { PXL_STEP_DIR: join(cwd, "steps") } });
-  const stop = watchSteps(pid, run.id, 0);
+  const stop = watchSteps(pid, run.id, k);
   stop();
-  emit(pid, run.id, { t: "final", k: 0, url: fileUrl(join(cwd, "final.png")) + "?t=" + Date.now() });
-  setStatus(pid, run.id, 0, { status: "done", endedAt: Date.now(), steps: 1 });
+  emit(pid, run.id, { t: "final", k, url: fileUrl(join(cwd, "final.png")) + "?t=" + Date.now() });
+  setStatus(pid, run.id, k, { status: "done", endedAt: Date.now(), steps: 1 });
 }
 
 /** Variant route: recolor an existing sprite directly with pxl (no LLM call, instant). */
