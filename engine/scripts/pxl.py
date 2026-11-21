@@ -1262,13 +1262,23 @@ def convert(im, size, palette=None, colors=None, do_outline=True, ramps=None, en
             q = p[x, y]
             if q[3] >= 128:
                 raw[(x + ox, y + oy)] = hx(q)
-    if colors:  # reduce distinct colors first (median cut)
-        tmp = Image.new("RGB", (len(raw) or 1, 1))
-        keys = list(raw)
-        tmp.putdata([rgb(raw[k]) for k in keys] or [(0, 0, 0)])
-        q = tmp.quantize(colors=colors, method=Image.Quantize.MEDIANCUT).convert("RGB")
-        for i, k in enumerate(keys):
-            raw[k] = hx(q.getpixel((i, 0)))
+    if colors and raw:  # own palette: median cut on sqrt-weighted unique colors, so big flat areas do not crowd out rare accents (white beard, glowing orb)
+        from collections import Counter
+        cnt = Counter(raw.values())
+        wl = []
+        for col, n in cnt.items():
+            wl.extend([rgb(col)] * max(1, int(round(n ** 0.5))))
+        tmp = Image.new("RGB", (len(wl), 1))
+        tmp.putdata(wl)
+        q = tmp.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        flat = q.getpalette()[: 3 * colors]
+        pal_rgb = [tuple(flat[i:i + 3]) for i in range(0, len(flat), 3)]
+        cache = {}
+        for k, col in raw.items():
+            if col not in cache:
+                r0, g0, b0 = rgb(col)
+                cache[col] = hx(min(pal_rgb, key=lambda t: (t[0] - r0) ** 2 + (t[1] - g0) ** 2 + (t[2] - b0) ** 2))
+            raw[k] = cache[col]
     for (x, y), c in raw.items():
         C.g[y][x] = C.pal.nearest(c) if palette else c
     if ramps:
