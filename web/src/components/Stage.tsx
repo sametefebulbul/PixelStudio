@@ -47,6 +47,9 @@ export function Stage({ s, size, variant, view, comments, draft, setDraft, onCan
         {variant && <span className="chip">{variant.model}</span>}
         {cur?.score != null && <span className="chip">{s.score} {cur.score}</span>}
         {variant?.outsideChange && variant.outsideChange.outside > 0 && <span className="chip warn">{s.outsideChanged(variant.outsideChange.outside)}</span>}
+        {variant?.preCriticStep != null && steps.some((x) => x.n === variant.preCriticStep) && steps.length > variant.preCriticStep && (
+          <button className={"btn sm" + (stepSel === variant.preCriticStep ? " on" : "")} onClick={() => setStepSel(stepSel === variant.preCriticStep ? null : variant.preCriticStep!)}>{s.beforeCritic}</button>
+        )}
         <span style={{ flex: 1 }} />
         <span className="coords">{hover ? `x ${hover[0]}  y ${hover[1]}` : draft ? `${draft[0]},${draft[1]} → ${draft[2]},${draft[3]}` : ""}</span>
         <span className="seg">

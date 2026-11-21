@@ -72,6 +72,7 @@ export interface Variant {
   startedAt?: number;
   endedAt?: number;
   starred?: boolean;
+  preCriticStep?: number; // step number of the version before the art-director fix pass (kept so a worse fix can be undone)
   rating?: number; // 1..5 given by the user (the real judge)
   note?: string;
   outsideChange?: { inside: number; outside: number }; // fix runs: pixels changed outside commented regions
@@ -140,6 +141,6 @@ export const DEFAULT_SETTINGS: Settings = {
   maxRounds: 3,
   negative: "",
   method: "hybrid",
-  critic: 1,
+  critic: 0, // measured: the fix pass often made DeepSeek sprites worse; opt-in, the pre-critic version stays selectable
   autoPick: true,
 };

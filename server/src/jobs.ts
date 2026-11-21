@@ -257,6 +257,11 @@ async function runAgent(pid: string, rid: string, k: number) {
     const ended = res.ok || !!budgetHit;
     // automatic art-director rounds (new drawings only; region fixes are already targeted)
     const rounds = run.kind === "fix" || budgetHit ? 0 : Math.max(0, Math.min(3, s.critic ?? 0));
+    if (rounds > 0 && existsSync(join(cwd, "final.png"))) {
+      copyFileSync(join(cwd, "final.png"), join(cwd, "final_before_critic.png"));
+      await new Promise((r) => setTimeout(r, 700)); // let the step watcher register the last render
+      updateRun(pid, rid, (r) => (r.variants[k].preCriticStep = r.variants[k].steps));
+    }
     for (let r = 0; r < rounds && res.ok && !ctrl.signal.aborted && existsSync(join(cwd, "final.png")); r++) {
       emit(pid, rid, { t: "text", k, text: `— art director round ${r + 1}/${rounds}` });
       await pxl(["render", join(cwd, "final.png"), "-o", join(cwd, "crit.png"), "--preview"]);
