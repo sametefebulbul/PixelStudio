@@ -25,6 +25,7 @@ export interface Settings {
   critic?: number;
   autoPick?: boolean;
   baseItem?: string;
+  convertRamps?: string; // convert route: "auto" (default), "none" or "body,glow" ramp names
   reference?: string;
 }
 
@@ -74,7 +75,7 @@ export interface Variant {
 export interface Run {
   id: string;
   projectId: string;
-  kind: "draw" | "fix" | "variant";
+  kind: "draw" | "fix" | "variant" | "convert";
   createdAt: number;
   settings: Settings;
   spec: Spec;

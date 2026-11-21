@@ -20,6 +20,7 @@ export const api = {
   patchProject: (pid: string, patch: Partial<Project>) => j<Project>("PATCH", `/api/projects/${pid}`, patch),
   refine: (pid: string, brief: string, settings: Settings) => j<Spec>("POST", `/api/projects/${pid}/refine`, { brief, settings }),
   startRun: (pid: string, spec: Spec, settings: Settings) => j<Run>("POST", `/api/projects/${pid}/runs`, { spec, settings }),
+  convert: (pid: string, settings: Settings) => j<Run>("POST", `/api/projects/${pid}/convert`, { settings }),
   run: (pid: string, rid: string) => j<Run>("GET", `/api/projects/${pid}/runs/${rid}`),
   cancel: (pid: string, rid: string, k?: number) => j("POST", `/api/projects/${pid}/runs/${rid}/cancel`, { k }),
   star: (pid: string, rid: string, k: number) => j("POST", `/api/projects/${pid}/runs/${rid}/variants/${k}/star`),

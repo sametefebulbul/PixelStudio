@@ -14,12 +14,13 @@ interface Props {
   library: LibItem[];
   busy: boolean;
   onRefine: () => void;
+  onConvert: () => void;
 }
 
-const SIZES = [16, 24, 32, 48, 64];
+const SIZES = [16, 24, 32, 48, 64, 96, 128];
 const LIGHTS = ["nw", "n", "ne", "w", "e", "sw", "s", "se"];
 
-export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, providers, palettes, library, busy, onRefine }: Props) {
+export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, providers, palettes, library, busy, onRefine, onConvert }: Props) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setSettings({ ...settings, [k]: v });
   const prov = providers.find((p) => p.id === settings.provider);
   const pal = palettes.find((p) => p.name === settings.palette);
@@ -179,6 +180,23 @@ export function LeftPanel({ s, pid, brief, setBrief, settings, setSettings, prov
             <img src={"/files/" + settings.reference.split("/projects/")[1]} style={{ width: 96, imageRendering: "pixelated", borderRadius: 6 }} />
             <button className="btn sm" onClick={() => set("reference", undefined)}>✕</button>
           </div>
+        )}
+        {settings.reference && (
+          <>
+            <label className="f">
+              {s.convertRamps}
+              <select value={settings.convertRamps ?? "auto"} onChange={(e) => set("convertRamps", e.target.value)}>
+                <option value="auto">{s.rampsAuto}</option>
+                <option value="none">{s.rampsNone}</option>
+                <option value="stone,fire">stone + fire</option>
+                <option value="stone,brass">stone + brass</option>
+                <option value="stone,glass">stone + glass</option>
+                <option value="stone,green">stone + green</option>
+                <option value="stone,purple">stone + purple</option>
+              </select>
+            </label>
+            <button className="btn primary" disabled={busy} onClick={onConvert} title={s.convertHint}>⚡ {s.convertNow}</button>
+          </>
         )}
       </div>
     </>

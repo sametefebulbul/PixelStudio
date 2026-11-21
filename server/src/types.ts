@@ -24,6 +24,7 @@ export interface Settings {
   critic?: number; // automatic art-director rounds after the first version (0..3)
   autoPick?: boolean; // let a vision model star the best variation when all are done
   baseItem?: string; // path to an existing sprite (variant / kitbash routes)
+  convertRamps?: string; // convert route: "auto" (default), "none" or "body,glow" ramp names
   reference?: string; // uploaded reference image path (convert route)
 }
 
@@ -81,7 +82,7 @@ export interface Variant {
 export interface Run {
   id: string;
   projectId: string;
-  kind: "draw" | "fix" | "variant";
+  kind: "draw" | "fix" | "variant" | "convert";
   createdAt: number;
   settings: Settings;
   spec: Spec;

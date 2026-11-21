@@ -7,7 +7,7 @@ import { appendFileSync } from "node:fs";
 import { DATA, HOST, PORT, PROJECTS, WEB_DIST } from "./config.js";
 import { checkPython, listLibrary, listPalettes, pxl } from "./engine.js";
 import { history, subscribe } from "./events.js";
-import { cancel, fileUrl, refine, startFix, startRun } from "./jobs.js";
+import { cancel, fileUrl, refine, startConvert, startFix, startRun } from "./jobs.js";
 import { saveApiSettings, apiSettings } from "./providers/api.js";
 import { PROVIDERS } from "./providers/index.js";
 import { queueState } from "./queue.js";
@@ -193,6 +193,15 @@ app.post("/api/projects/:pid/fix", async (c) => {
   const b = await c.req.json();
   try {
     return c.json(startFix(c.req.param("pid"), { run: b.run, k: Number(b.k) }, b.commentIds ?? [], b.settings));
+  } catch (e) {
+    return fail(c, e);
+  }
+});
+/** Reference image -> pixel art without a model (instant). */
+app.post("/api/projects/:pid/convert", async (c) => {
+  const b = await c.req.json();
+  try {
+    return c.json(startConvert(c.req.param("pid"), b.settings as Settings));
   } catch (e) {
     return fail(c, e);
   }

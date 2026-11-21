@@ -37,7 +37,7 @@ export default function App() {
   const [rid, setRid] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
   const [draft, setDraft] = useState<Region | null>(null);
-  const [busy, setBusy] = useState<"" | "refine" | "draw">("");
+  const [busy, setBusy] = useState<"" | "refine" | "draw" | "convert">("");
   const [err, setErr] = useState("");
   const [modal, setModal] = useState<"" | "providers" | "script">("");
   const [scriptText, setScriptText] = useState("");
@@ -143,6 +143,22 @@ export default function App() {
       setBusy("");
     }
   }
+  async function convertNow() {
+    if (!pid || !settings) return;
+    setBusy("convert");
+    setErr("");
+    try {
+      const r = await api.convert(pid, settings);
+      setRid(r.id);
+      setSel(0);
+      setDraft(null);
+      await reloadProject();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy("");
+    }
+  }
   async function draw() {
     if (!pid || !settings || !spec) return;
     setBusy("draw");
@@ -189,7 +205,7 @@ export default function App() {
       <div className="main">
         <div className="col left">
           {pid && <LeftPanel s={s} pid={pid} brief={brief} setBrief={setBrief} settings={settings} setSettings={setSettings}
-            providers={status.providers} palettes={palettes} library={library} busy={busy === "refine"} onRefine={refine} />}
+            providers={status.providers} palettes={palettes} library={library} busy={busy === "refine" || busy === "convert"} onRefine={refine} onConvert={convertNow} />}
         </div>
 
         <div className="col">

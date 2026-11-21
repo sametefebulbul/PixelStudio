@@ -210,6 +210,7 @@ async function runAgent(pid: string, rid: string, k: number) {
       // start from the parent's script and image
       const pdir = variantDir(pid, run.parent.run, run.parent.k);
       copyFileSync(join(pdir, "draw.py"), join(cwd, "draw.py"));
+      if (existsSync(join(pdir, "start.png"))) copyFileSync(join(pdir, "start.png"), join(cwd, "start.png")); // convert runs: draw.py loads it
       copyFileSync(join(pdir, "final.png"), join(cwd, "current.png"));
       const proj = getProject(pid);
       const comments = proj.comments.filter((c) => run.commentIds?.includes(c.id));
@@ -332,6 +333,50 @@ Repaint it as a clean, hand-made pixel sprite: keep the silhouette and the signa
   } finally {
     controllers.delete(rid + "/" + k);
   }
+}
+
+/** Convert route: reference image -> pixel art, deterministic (background cut-out, contrast, two-ramp mapping). No model, ~2 s. */
+export function startConvert(pid: string, settings: Settings): Run {
+  if (!settings.reference || !settings.reference.startsWith(PROJECTS) || !existsSync(settings.reference)) throw new Error("upload a reference image first");
+  const title = (settings.reference.split("/").pop() ?? "reference").replace(/\.[a-z0-9]+$/i, "");
+  const spec: Spec = {
+    title: "Convert " + title, subject: "converted reference image", size: settings.size, route: "convert", composition: "", parts: [], details: [], avoid: [],
+    palette: settings.palette,
+    style: { light: settings.light, outline: settings.outline, shading: settings.shading, dither: settings.dither, tones: settings.tones, detail: settings.detail },
+    prompt: "Deterministic conversion of the user's reference image.",
+  };
+  const run: Run = {
+    id: newId("r"), projectId: pid, kind: "convert", createdAt: Date.now(), settings, spec,
+    variants: [{ k: 0, status: "queued", provider: settings.provider, model: "pxl convert", seed: settings.seed, steps: 0 }],
+  };
+  saveRun(run);
+  updateProject(pid, (p) => {
+    p.runs.unshift(run.id);
+    p.spec = spec;
+    p.settings = settings;
+  });
+  mkdirSync(join(variantDir(pid, run.id, 0), "steps"), { recursive: true });
+  void runConvertOps(pid, run);
+  return run;
+}
+
+async function runConvertOps(pid: string, run: Run) {
+  const s = run.settings;
+  const cwd = variantDir(pid, run.id, 0);
+  setStatus(pid, run.id, 0, { status: "running", startedAt: Date.now() });
+  const args = ["convert", s.reference!, "--size", String(run.spec.size), "--palette", run.spec.palette, "--ramps", s.convertRamps || "auto", "-o", join(cwd, "start.png")];
+  emit(pid, run.id, { t: "tool", k: 0, name: "pxl convert", detail: args.slice(1).join(" ") });
+  const r = await pxl(args);
+  emit(pid, run.id, { t: "tool_result", k: 0, ok: r.code === 0, detail: (r.stdout + r.stderr).trim().slice(0, 400) });
+  if (r.code !== 0) return setStatus(pid, run.id, 0, { status: "error", error: r.stderr.slice(0, 300), endedAt: Date.now() });
+  copyFileSync(join(cwd, "start.png"), join(cwd, "final.png"));
+  // the script a later region-fix round edits: starts from the converted sprite
+  writeFileSync(join(cwd, "draw.py"), 'from pxl import *\nC = load("start.png")\n');
+  await pxl(["render", join(cwd, "final.png"), "-o", join(cwd, "final.png")], { env: { PXL_STEP_DIR: join(cwd, "steps") } });
+  const stop = watchSteps(pid, run.id, 0);
+  stop();
+  emit(pid, run.id, { t: "final", k: 0, url: fileUrl(join(cwd, "final.png")) + "?t=" + Date.now() });
+  setStatus(pid, run.id, 0, { status: "done", endedAt: Date.now(), steps: 1 });
 }
 
 /** Variant route: recolor an existing sprite directly with pxl (no LLM call, instant). */

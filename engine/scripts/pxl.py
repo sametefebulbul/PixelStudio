@@ -1192,7 +1192,7 @@ def two_ramp_map(C, dark, glow, boost=True):
                 continue
             r, g, b = rgb(c)
             h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
-            if (r > 150 and r > g * 1.25 and s > 0.45) or v > 0.78:
+            if (s > 0.45 and v > 0.5) or (v > 0.78 and s > 0.25):
                 t = min(1.0, max(0.0, (v - 0.45) / 0.55))
                 C.g[y][x] = hx(G[min(len(G) - 1, int(t * len(G)))])
             else:
@@ -1200,8 +1200,47 @@ def two_ramp_map(C, dark, glow, boost=True):
     return C
 
 
+def auto_ramps(im, pal):
+    """Pick (body, glow) ramps for a dark illustration with glowing parts, or None when the image has no real glow
+    (then plain palette matching is better). Glow = saturated + bright pixels; its dominant hue picks the glow ramp."""
+    import colorsys
+    small = im.convert("RGBA")
+    small.thumbnail((96, 96))
+    px = [p for p in small.get_flattened_data() if p[3] >= 128] if hasattr(small, "get_flattened_data") else [p for p in small.getdata() if p[3] >= 128]
+    if len(px) < 50:
+        return None
+    hues = [0] * 6
+    glow = body = dark = 0
+    vsum = 0.0
+    for r, g, b, _a in px:
+        h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+        vsum += v
+        if v < 0.3:
+            dark += 1
+        if (s > 0.45 and v > 0.7) or (v > 0.85 and s > 0.25):
+            glow += 1
+            d = h * 360
+            hues[0 if (d < 50 or d >= 330) else 1 if d < 70 else 2 if d < 170 else 3 if d < 200 else 4 if d < 260 else 5] += 1
+        elif v < 0.62:
+            body += 1
+    n = float(len(px))
+    if glow / n < 0.03 or body / n < 0.25 or dark / n < 0.25 or vsum / n > 0.55:  # needs a very dark body with emissive glow
+        return None
+    glow_ramp = ["fire", "brass", "green", "glass", "blue", "purple"][max(range(6), key=lambda i: hues[i])]
+    body_ramp = "stone" if "stone" in pal.ramps else "iron"
+    if glow_ramp not in pal.ramps or body_ramp not in pal.ramps:
+        return None
+    return [body_ramp, glow_ramp]
+
+
 def convert(im, size, palette=None, colors=None, do_outline=True, ramps=None, enhance=True):
+    big = max(im.size) >= 256  # illustrations/photos, not already-pixelated sprites
+    if max(im.size) > 768:  # background cut-out and scaling are pure Python: work on a sane size
+        im = im.copy()
+        im.thumbnail((768, 768), Image.LANCZOS)
     im = cutout_background(im)
+    if ramps == ["auto"]:
+        ramps = auto_ramps(im, Palette(palette)) if big else None
     if enhance and im.mode == "RGBA":  # AI illustrations are dark and soft: more contrast/saturation survives downscaling
         from PIL import ImageEnhance
         a = im.split()[3]
@@ -1384,7 +1423,7 @@ def main(argv):
         colors = _arg(args, "--colors", None, int)
         out = _arg(args, "-o") or os.path.splitext(args[0])[0] + "_px.png"
         ramps = _arg(args, "--ramps")  # "body,glow" e.g. stone,fire: two-ramp mapping for dark illustrations with glowing parts
-        C = convert(Image.open(args[0]), size, None if pal == "none" else pal, colors, ramps=ramps.split(",") if ramps else None, enhance=not _flag(args, "--no-enhance"))
+        C = convert(Image.open(args[0]), size, None if pal == "none" else pal, colors, ramps=ramps.split(",") if ramps and ramps != "none" else None, enhance=not _flag(args, "--no-enhance"))
         C.save(out, preview=True)
         print("wrote", out)
     elif cmd == "snap":
