@@ -54,8 +54,14 @@ export function normalizeSpec(raw: any, s: Settings): Spec {
 
 export async function refine(pid: string, brief: string, s: Settings, refineProvider?: string, refineModel?: string): Promise<Spec> {
   const pal = listPalettes().find((p) => p.name === s.palette);
-  const prov = provider(refineProvider ?? s.provider);
-  const model = refineModel ?? s.model;
+  // The spec is cheap text work: do it with an inexpensive model so the (quota-limited) drawing model only draws.
+  const cheap = !refineProvider && s.provider === "claude-cli" && process.env.PS_REFINE !== "off";
+  let prov = provider(cheap ? "opencode" : (refineProvider ?? s.provider));
+  let model = cheap ? (process.env.PS_REFINE_MODEL || "opencode-go/glm-5.3-flash") : (refineModel ?? s.model);
+  if (cheap && !(await prov.status()).ok) {
+    prov = provider(s.provider);
+    model = s.model;
+  }
   const prompt = refinePrompt(brief, s, pal, s.baseItem);
   let lastErr = "";
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -185,9 +191,8 @@ async function runAgent(pid: string, rid: string, k: number) {
   setStatus(pid, rid, k, { status: "running", startedAt: Date.now() });
   const stop = watchSteps(pid, rid, k);
   // Budget: unbounded agent loops ran 15-70 min. Past the limit the agent is stopped and the best step so far becomes the result.
-  const slow = s.provider !== "claude-cli";
-  const maxCalls = s.maxToolCalls ?? (slow ? 45 : 0);
-  const maxMs = (s.maxMinutes ?? (slow ? 10 : 0)) * 60_000;
+  const maxCalls = s.maxToolCalls ?? 30;
+  const maxMs = (s.maxMinutes ?? 2) * 60_000;
   let calls = 0;
   let budgetHit = "";
   const hit = (why: string) => {
@@ -197,7 +202,7 @@ async function runAgent(pid: string, rid: string, k: number) {
     ctrl.abort();
   };
   const budgetTimer = maxMs ? setTimeout(() => hit(`${Math.round(maxMs / 60000)} min`), maxMs) : undefined;
-  const inline = s.provider !== "claude-cli"; // no file-reading detours for slow/remote models: embed the guide + recipes
+  const inline = true; // embed guide + recipe + reference sprites: no file-reading detours (faster, cheaper)
   let prompt: string;
   const attach: string[] = [];
   try {

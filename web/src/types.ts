@@ -17,8 +17,8 @@ export interface Settings {
   dither: boolean;
   tones: number;
   detail: "low" | "medium" | "high";
-  maxToolCalls?: number; // agent budget (0 = unlimited); default 45 for non-Claude providers
-  maxMinutes?: number; // agent time budget (0 = unlimited); default 10 for non-Claude providers
+  maxToolCalls?: number; // agent budget (0 = unlimited); default 30
+  maxMinutes?: number; // agent time budget (0 = unlimited); default 2
   maxRounds: number;
   negative: string;
   method?: "procedural" | "grid" | "hybrid";
