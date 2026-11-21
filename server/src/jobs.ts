@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { PROJECTS } from "./config.js";
 import { emit } from "./events.js";
 import { listPalettes, pxl } from "./engine.js";
-import { criticFixPrompt, criticPrompt, drawPrompt, fixPrompt, pickPrompt, refinePrompt } from "./prompts.js";
+import { criticFixPrompt, criticOneShotPrompt, criticPrompt, drawPrompt, fixPrompt, pickPrompt, refinePrompt } from "./prompts.js";
 import { provider } from "./providers/index.js";
 import { enqueue } from "./queue.js";
 import { getProject, getRun, newId, saveRun, updateProject, updateRun, variantDir } from "./store.js";
@@ -261,11 +261,24 @@ async function runAgent(pid: string, rid: string, k: number) {
       emit(pid, rid, { t: "text", k, text: `— art director round ${r + 1}/${rounds}` });
       await pxl(["render", join(cwd, "final.png"), "-o", join(cwd, "crit.png"), "--preview"]);
       const common = { cwd, model: s.model, effort: s.effort, vision, env: { PXL_STEP_DIR: join(cwd, "steps"), PYTHONDONTWRITEBYTECODE: "1" }, signal: ctrl.signal, onEvent: (e: any) => emit(pid, rid, { ...e, k } as any) };
-      await prov.draw({ ...common, prompt: criticPrompt(run.spec, vision), attach: vision && s.provider === "opencode" ? [join(cwd, "crit_x8.png")] : [] });
-      const cf = join(cwd, "critique.txt");
-      if (!existsSync(cf)) break;
-      const critique = readFileSync(cf, "utf-8").trim();
-      copyFileSync(cf, join(cwd, `critique_${r + 1}.txt`));
+      let critique = "";
+      if (s.provider === "opencode") {
+        // one call, no agent loop: image (vision) or ASCII (blind) in, critique text out
+        const ascii = vision ? "" : (await pxl(["show", join(cwd, "final.png"), "--lum"])).stdout;
+        try {
+          critique = (await prov.complete(criticOneShotPrompt(run.spec, vision, ascii), s.model, ctrl.signal, vision ? [join(cwd, "crit_x8.png")] : [])).trim();
+        } catch {
+          /* fall through: no critique */
+        }
+        if (!critique) break;
+        writeFileSync(join(cwd, `critique_${r + 1}.txt`), critique);
+      } else {
+        await prov.draw({ ...common, prompt: criticPrompt(run.spec, vision), attach: [] });
+        const cf = join(cwd, "critique.txt");
+        if (!existsSync(cf)) break;
+        critique = readFileSync(cf, "utf-8").trim();
+        copyFileSync(cf, join(cwd, `critique_${r + 1}.txt`));
+      }
       emit(pid, rid, { t: "text", k, text: "Art director:\n" + critique });
       await prov.draw({ ...common, prompt: criticFixPrompt(critique) });
     }

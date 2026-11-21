@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PXL, PYTHON, SKILL_MD, ENGINE } from "./config.js";
 import type { PaletteInfo } from "./engine.js";
+import { exemplarText } from "./exemplars.js";
 import type { Comment, Settings, Spec } from "./types.js";
 
 export const SPEC_SCHEMA_HINT = `{
@@ -66,6 +67,8 @@ export function knowledgeText(spec: Spec): string {
     const f = join(ENGINE, "references", "recipes", n + ".py");
     if (existsSync(f)) parts.push(`## Recipe: ${n}.py (a complete working draw script; copy its structure)\n\`\`\`python\n${readFileSync(f, "utf-8")}\n\`\`\``);
   }
+  const ex = exemplarText(spec);
+  if (ex) parts.push(ex);
   return parts.join("\n\n");
 }
 
@@ -116,6 +119,16 @@ export function criticPrompt(spec: Spec, vision: boolean): string {
 It should be: ${spec.subject || spec.title}. Brief: ${spec.prompt.slice(0, 600)}
 Name the 3 WORST problems that keep it from looking hand-made and professional: implausible proportions or function (could a person use/wear/hold it?), unreadable silhouette, muddy values, missing/misplaced highlights, noisy texture, jaggies, outline issues.
 For each give the pixel region (x0,y0,x1,y1 within 0..${m}) and a concrete fix. Write them as a numbered list to ./critique.txt and do NOT edit any other file.`;
+}
+
+/** One-shot critic (no tools, no files): the sprite is attached as an image or pasted as ASCII; the answer IS the critique. */
+export function criticOneShotPrompt(spec: Spec, vision: boolean, ascii: string): string {
+  const m = spec.size - 1;
+  return `You are a strict pixel-art art director. ${vision ? "The attached image shows the sprite at 8x on dark and light backgrounds." : ""}
+${ascii ? `Its pixel grid (ASCII, coordinate ruler included):\n${ascii}\n` : ""}
+It should be: ${spec.subject || spec.title}. Brief: ${spec.prompt.slice(0, 600)}
+Name the 3 WORST problems that keep it from looking hand-made and professional: implausible proportions or function (could a person use/wear/hold it?), unreadable silhouette, muddy values, missing/misplaced highlights, noisy texture, jaggies, outline issues.
+For each give the pixel region (x0,y0,x1,y1 within 0..${m}) and a concrete fix. Answer ONLY with a numbered list (3 items), no preface.`;
 }
 
 export function criticFixPrompt(critique: string): string {

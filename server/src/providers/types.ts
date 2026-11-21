@@ -28,7 +28,7 @@ export interface Provider {
   status(): Promise<ProviderStatus>;
   vision(model: string): boolean;
   /** One-shot text completion (prompt refinement). Returns the model's text. */
-  complete(prompt: string, model: string, signal?: AbortSignal): Promise<string>;
+  complete(prompt: string, model: string, signal?: AbortSignal, attach?: string[]): Promise<string>;
   /** Run the drawing agent in `cwd` until it finishes. */
   draw(a: DrawArgs): Promise<{ ok: boolean; error?: string }>;
 }

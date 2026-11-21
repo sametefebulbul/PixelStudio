@@ -54,9 +54,12 @@ export const opencode: Provider = {
     const v = await which("opencode");
     return { id: "opencode", label: "opencode (GLM / DeepSeek …)", ok: !!v, detail: v ?? "`opencode` not found on PATH", models: models() };
   },
-  async complete(prompt, model, signal) {
+  async complete(prompt, model, signal, attach) {
     let text = "";
-    const r = await runLines("opencode", ["run", "--standalone", "--format", "json", "-m", model, prompt], {
+    const args = ["run", "--standalone", "--format", "json", "-m", withEffort(model, "low")];
+    for (const f of attach ?? []) args.push("-f", f);
+    args.push(prompt);
+    const r = await runLines("opencode", args, {
       signal,
       onLine: (l) => {
         try {
