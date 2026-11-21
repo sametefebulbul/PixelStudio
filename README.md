@@ -29,6 +29,7 @@ npm install
 npm run build
 npm start            # → http://127.0.0.1:5178
 # or: node bin/pixel-studio.js   (builds on first run, opens the browser)
+./start.sh            # one-click: installs, builds if needed, starts, opens the browser
 ```
 Development: `npm run dev` (server on :5178, Vite UI on :5173 with proxy).
 

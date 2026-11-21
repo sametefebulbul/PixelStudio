@@ -10,3 +10,4 @@ __pycache__/
 bench/runs/
 bench/results/
 .venv-ext/
+pixel-studio.desktop
